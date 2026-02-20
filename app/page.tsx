@@ -209,7 +209,15 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
   }, [hovered]);
 
   const handleClick = () => {
-    document.documentElement.requestFullscreen?.().then(onEnter).catch(onEnter);
+    const el = document.documentElement;
+    if (el.requestFullscreen) {
+      el.requestFullscreen().then(onEnter, onEnter);
+    } else if ((el as unknown as Record<string, () => void>).webkitRequestFullscreen) {
+      (el as unknown as Record<string, () => void>).webkitRequestFullscreen();
+      onEnter();
+    } else {
+      onEnter();
+    }
   };
 
   return (
