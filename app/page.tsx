@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
+import WorldMap from "./components/WorldMap";
+import NetworkGraph from "./components/NetworkGraph";
+import AudioWaveform from "./components/AudioWaveform";
 
 // ─── Utility helpers ───────────────────────────────────────────────
 function rand(min: number, max: number) {
@@ -20,61 +23,64 @@ function randomHex(len: number) {
 function randomMAC() {
   return Array.from({ length: 6 }, () => randomHex(2)).join(":");
 }
-function timestamp() {
+function ts() {
   return new Date().toISOString().replace("T", " ").slice(0, 19);
 }
 
-// ─── Data generators ───────────────────────────────────────────────
+// ─── Data ──────────────────────────────────────────────────────────
 const PORTS = [21, 22, 23, 25, 53, 80, 110, 135, 139, 443, 445, 993, 1433, 1521, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9200, 27017];
-const SERVICES = ["FTP", "SSH", "Telnet", "SMTP", "DNS", "HTTP", "POP3", "RPC", "NetBIOS", "HTTPS", "SMB", "IMAPS", "MSSQL", "Oracle", "MySQL", "RDP", "PostgreSQL", "VNC", "Redis", "HTTP-Proxy", "HTTPS-Alt", "Elasticsearch", "MongoDB"];
 const VULNS = [
-  "CVE-2024-21762 // FortiOS Out-of-Bound Write",
+  "CVE-2024-21762 // FortiOS OOB Write",
   "CVE-2024-3400 // PAN-OS Command Injection",
-  "CVE-2023-44228 // Log4Shell Remote Code Execution",
+  "CVE-2023-44228 // Log4Shell RCE",
   "CVE-2024-1709 // ScreenConnect Auth Bypass",
-  "CVE-2023-46805 // Ivanti Connect Secure Auth Bypass",
-  "CVE-2024-27198 // JetBrains TeamCity Auth Bypass",
-  "CVE-2023-4966 // Citrix Bleed Information Disclosure",
-  "CVE-2024-0012 // PAN-OS Management Auth Bypass",
-  "CVE-2023-22515 // Atlassian Confluence Priv Escalation",
-  "CVE-2024-38077 // Windows RRAS Remote Code Execution",
+  "CVE-2023-46805 // Ivanti Auth Bypass",
+  "CVE-2024-27198 // TeamCity Auth Bypass",
+  "CVE-2023-4966 // Citrix Bleed",
+  "CVE-2024-0012 // PAN-OS Mgmt Bypass",
+  "CVE-2023-22515 // Confluence Priv Esc",
+  "CVE-2024-38077 // Windows RRAS RCE",
+  "CVE-2024-6387 // OpenSSH regreSSHion",
+  "CVE-2024-4577 // PHP-CGI Arg Injection",
 ];
 const EXPLOITS = [
-  "Deploying polymorphic shellcode...",
-  "Injecting into kernel memory space...",
-  "Bypassing ASLR via info leak...",
-  "Escalating privileges via dirty pipe...",
+  "Deploying polymorphic shellcode via ROP chain...",
+  "Injecting into kernel memory space at ring-0...",
+  "Bypassing ASLR via information leak primitive...",
+  "Escalating privileges via dirty pipe (CVE-2022-0847)...",
   "Establishing reverse shell on port 4444...",
   "Extracting NTLM hashes from SAM database...",
-  "Dumping LSASS process memory...",
-  "Deploying fileless malware payload...",
-  "Bypassing EDR via syscall hooking...",
-  "Establishing C2 channel via DNS tunneling...",
-  "Hijacking TLS session via MITM...",
+  "Dumping LSASS process memory via MiniDumpWriteDump...",
+  "Deploying fileless malware payload in registry...",
+  "Bypassing EDR via direct syscall invocation...",
+  "Establishing C2 channel via DNS-over-HTTPS tunneling...",
+  "Hijacking TLS session via downgrade attack...",
   "Exploiting race condition in auth handler...",
   "Injecting malicious DLL via AppInit_DLLs...",
-  "Triggering use-after-free in heap allocator...",
-  "Pivoting to internal network segment...",
-  "Extracting credentials from browser storage...",
-  "Decrypting Kerberos TGT tickets...",
-  "Overwriting SEH chain for code execution...",
-  "Deploying rootkit via signed driver exploit...",
+  "Triggering UAF in heap allocator (tcmalloc)...",
+  "Pivoting to internal network via compromised VPN...",
+  "Extracting credentials from Chrome credential store...",
+  "Forging Kerberos Golden Ticket (krbtgt hash)...",
+  "Deploying UEFI rootkit via signed driver...",
   "Exfiltrating data via covert ICMP channel...",
+  "Performing pass-the-hash lateral movement...",
+  "Overwriting MBR for persistence mechanism...",
+  "Enumerating Active Directory via BloodHound...",
 ];
 const FILE_PATHS = [
-  "/etc/shadow", "/etc/passwd", "/var/log/auth.log", "/root/.ssh/id_rsa",
-  "/proc/self/maps", "/sys/kernel/security/", "/var/lib/mysql/",
+  "/etc/shadow", "/etc/passwd", "/root/.ssh/id_rsa", "/root/.ssh/authorized_keys",
+  "/proc/self/maps", "/var/lib/mysql/data/users.ibd",
   "C:\\Windows\\System32\\config\\SAM", "C:\\Users\\Admin\\Desktop\\secrets.xlsx",
   "/home/admin/.bash_history", "/opt/tomcat/conf/server.xml",
-  "/var/www/html/wp-config.php", "/etc/nginx/nginx.conf",
+  "/var/www/html/wp-config.php", "/etc/nginx/sites-enabled/default",
+  "C:\\Windows\\NTDS\\ntds.dit", "/var/log/auth.log",
 ];
-const PROTOCOLS = ["TCP", "UDP", "ICMP", "TLS", "SSH", "DNS", "HTTP"];
-const OS_LIST = ["Windows Server 2022", "Ubuntu 22.04", "CentOS 8", "Debian 12", "FreeBSD 14", "macOS Ventura", "Red Hat 9.3", "Kali Linux 2024.1"];
-const HASHES = () => randomHex(64);
-const ENCRYPTION_ALGOS = ["AES-256-GCM", "ChaCha20-Poly1305", "RSA-4096", "Ed25519", "Blowfish-CBC", "Camellia-256"];
+const PROTOCOLS = ["TCP", "UDP", "ICMP", "TLS1.3", "SSH", "DNS", "HTTP/2", "QUIC"];
+const OS_LIST = ["Win Server 2022", "Ubuntu 22.04", "CentOS 8", "Debian 12", "FreeBSD 14", "macOS Sonoma", "RHEL 9.3", "Kali 2024.1"];
+const ENCRYPTION = ["AES-256-GCM", "ChaCha20-Poly1305", "RSA-4096", "Ed25519", "Camellia-256", "Twofish-256"];
 
 // ─── Matrix Rain ───────────────────────────────────────────────────
-function MatrixRain() {
+function MatrixRain({ opacity = 0.08 }: { opacity?: number }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -83,109 +89,134 @@ function MatrixRain() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    resize();
 
-    const chars = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF{}[]<>/\\|;:=+-*&^%$#@!";
-    const fontSize = 14;
+    const chars = "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF<>/\\|{}[];:=+-*&^%$#@!~";
+    const fontSize = 13;
     const columns = Math.floor(canvas.width / fontSize);
-    const drops: number[] = Array.from({ length: columns }, () =>
-      Math.random() * -100
-    );
+    const drops: number[] = Array.from({ length: columns }, () => Math.random() * -100);
+    const speeds: number[] = Array.from({ length: columns }, () => 0.5 + Math.random() * 1);
 
     function draw() {
-      ctx!.fillStyle = "rgba(0, 0, 0, 0.05)";
+      ctx!.fillStyle = "rgba(0, 0, 0, 0.06)";
       ctx!.fillRect(0, 0, canvas!.width, canvas!.height);
-      ctx!.fillStyle = "#00ff41";
-      ctx!.font = `${fontSize}px monospace`;
 
       for (let i = 0; i < drops.length; i++) {
-        const char = chars[Math.floor(Math.random() * chars.length)];
+        const ch = chars[Math.floor(Math.random() * chars.length)];
         const x = i * fontSize;
         const y = drops[i] * fontSize;
 
         if (y > 0) {
-          ctx!.globalAlpha = Math.random() * 0.5 + 0.5;
-          ctx!.fillText(char, x, y);
+          const brightness = Math.random() > 0.95 ? "#ffffff" : "#00ff41";
+          ctx!.fillStyle = brightness;
+          ctx!.globalAlpha = Math.random() * 0.4 + 0.6;
+          ctx!.font = `${fontSize}px monospace`;
+          ctx!.fillText(ch, x, y);
           ctx!.globalAlpha = 1;
         }
 
         if (y > canvas!.height && Math.random() > 0.975) {
           drops[i] = 0;
+          speeds[i] = 0.5 + Math.random() * 1;
         }
-        drops[i]++;
+        drops[i] += speeds[i];
       }
     }
 
-    const interval = setInterval(draw, 45);
-    const handleResize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    window.addEventListener("resize", handleResize);
+    const interval = setInterval(draw, 40);
+    window.addEventListener("resize", resize);
     return () => {
       clearInterval(interval);
-      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("resize", resize);
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="matrix-bg" />;
+  return <canvas ref={canvasRef} className="matrix-bg" style={{ opacity }} />;
 }
 
-// ─── Fullscreen Entry Screen ───────────────────────────────────────
+// ─── Noise Overlay ─────────────────────────────────────────────────
+function NoiseOverlay() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    canvas.width = 256;
+    canvas.height = 256;
+
+    const imageData = ctx.createImageData(256, 256);
+    function drawNoise() {
+      for (let i = 0; i < imageData.data.length; i += 4) {
+        const v = Math.random() * 255;
+        imageData.data[i] = v;
+        imageData.data[i + 1] = v;
+        imageData.data[i + 2] = v;
+        imageData.data[i + 3] = 12;
+      }
+      ctx!.putImageData(imageData, 0, 0);
+    }
+
+    const interval = setInterval(drawNoise, 80);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: "fixed",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        zIndex: 9997,
+        opacity: 0.035,
+      }}
+    />
+  );
+}
+
+// ─── Entry Screen ──────────────────────────────────────────────────
 function EntryScreen({ onEnter }: { onEnter: () => void }) {
   const [hovered, setHovered] = useState(false);
-  const [glitchText, setGlitchText] = useState("ENTER SHADOW_NET");
+  const [glitchText, setGlitchText] = useState("INITIALIZE SYSTEM");
 
   useEffect(() => {
     if (!hovered) return;
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZアイウエオカキクケコ0123456789!@#$%";
-    const original = "ENTER SHADOW_NET";
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZアイウエオ0123456789!@#$%^&*";
+    const original = "INITIALIZE SYSTEM";
     let iteration = 0;
     const interval = setInterval(() => {
       setGlitchText(
-        original
-          .split("")
-          .map((char, i) => {
-            if (i < iteration) return original[i];
-            return chars[Math.floor(Math.random() * chars.length)];
-          })
-          .join("")
+        original.split("").map((_, i) =>
+          i < iteration ? original[i] : chars[Math.floor(Math.random() * chars.length)]
+        ).join("")
       );
-      iteration += 1 / 2;
+      iteration += 0.5;
       if (iteration >= original.length) {
         clearInterval(interval);
         setGlitchText(original);
       }
-    }, 40);
+    }, 35);
     return () => clearInterval(interval);
   }, [hovered]);
 
   const handleClick = () => {
-    const el = document.documentElement;
-    if (el.requestFullscreen) {
-      el.requestFullscreen().then(onEnter).catch(onEnter);
-    } else {
-      onEnter();
-    }
+    document.documentElement.requestFullscreen?.().then(onEnter).catch(onEnter);
   };
 
   return (
-    <div style={{
-      width: "100vw",
-      height: "100vh",
-      background: "#000",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center",
-      fontFamily: "'Courier New', monospace",
-      cursor: "default",
-      position: "relative",
-    }}>
-      <MatrixRain />
+    <div className="entry-screen">
+      <MatrixRain opacity={0.12} />
       <div style={{ zIndex: 10, textAlign: "center" }}>
-        <pre className="glow" style={{ fontSize: 18, marginBottom: 10, lineHeight: 1.2, userSelect: "none" }}>
+        <pre className="glow-strong entry-logo">
 {`
  ███████╗██╗  ██╗ █████╗ ██████╗  ██████╗ ██╗    ██╗
  ██╔════╝██║  ██║██╔══██╗██╔══██╗██╔═══██╗██║    ██║
@@ -195,39 +226,21 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
  ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚══╝╚══╝
 `}
         </pre>
-        <div className="glow-cyan" style={{ fontSize: 12, marginBottom: 50, letterSpacing: 6, userSelect: "none" }}>
-          AUTONOMOUS PENETRATION FRAMEWORK
+        <div className="glow-cyan entry-subtitle">
+          AUTONOMOUS PENETRATION FRAMEWORK v4.2.1
         </div>
-
         <button
+          className="entry-button"
           onClick={handleClick}
           onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => { setHovered(false); setGlitchText("ENTER SHADOW_NET"); }}
-          style={{
-            background: hovered ? "rgba(0, 255, 65, 0.15)" : "transparent",
-            border: `2px solid ${hovered ? "#00ff41" : "#004400"}`,
-            color: "#00ff41",
-            fontFamily: "'Courier New', monospace",
-            fontSize: 18,
-            fontWeight: "bold",
-            padding: "16px 48px",
-            cursor: "pointer",
-            letterSpacing: 4,
-            textShadow: hovered ? "0 0 10px #00ff41, 0 0 20px #00ff41, 0 0 40px #00ff41" : "0 0 5px #00ff41",
-            boxShadow: hovered ? "0 0 20px rgba(0,255,65,0.3), inset 0 0 20px rgba(0,255,65,0.1)" : "0 0 10px rgba(0,255,65,0.1)",
-            transition: "all 0.3s ease",
-            position: "relative",
-            overflow: "hidden",
-          }}
+          onMouseLeave={() => { setHovered(false); setGlitchText("INITIALIZE SYSTEM"); }}
         >
-          <span style={{ position: "relative", zIndex: 1 }}>[ {glitchText} ]</span>
+          [ {glitchText} ]
         </button>
-
-        <div style={{ marginTop: 30, fontSize: 10, color: "#003300", letterSpacing: 2, userSelect: "none" }}>
+        <div style={{ marginTop: 24, fontSize: 9, color: "#003300", letterSpacing: 2 }}>
           FULLSCREEN MODE REQUIRED FOR OPERATIONAL SECURITY
         </div>
-
-        <div className="pulse" style={{ marginTop: 60, fontSize: 11, color: "#006600", letterSpacing: 1 }}>
+        <div className="pulse entry-warning" style={{ color: "#004400" }}>
           WARNING: UNAUTHORIZED ACCESS WILL BE TRACED AND PROSECUTED
         </div>
       </div>
@@ -237,25 +250,32 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
 
 // ─── Boot Sequence ─────────────────────────────────────────────────
 function BootSequence({ onComplete }: { onComplete: () => void }) {
-  const [bootLines, setBootLines] = useState<string[]>([]);
-  const [bootDone, setBootDone] = useState(false);
+  const [lines, setLines] = useState<string[]>([]);
+  const [done, setDone] = useState(false);
 
   useEffect(() => {
     const boot = [
-      "SHADOW_NET KERNEL v4.2.1 INITIALIZING...",
       "",
-      `[${timestamp()}] Loading exploit modules............... [OK]`,
-      `[${timestamp()}] Initializing TOR relay chain.......... [OK]`,
-      `[${timestamp()}] Connecting to C2 infrastructure....... [OK]`,
-      `[${timestamp()}] Loading vulnerability database........ [OK]`,
-      `[${timestamp()}] Calibrating packet injection engine... [OK]`,
-      `[${timestamp()}] Spoofing MAC/IP identifiers........... [OK]`,
-      `[${timestamp()}] Establishing encrypted channels....... [OK]`,
-      `[${timestamp()}] Deploying network sniffers............ [OK]`,
-      `[${timestamp()}] Initializing hash cracker (GPU x8).... [OK]`,
-      `[${timestamp()}] Loading zero-day exploit cache........ [OK]`,
+      "SHADOW_NET KERNEL v4.2.1 — SECURE BOOT",
+      "═══════════════════════════════════════════════════",
       "",
-      `System ready. Welcome, gh0st_r00t.`,
+      `[${ts()}] Verifying kernel integrity............ [OK]`,
+      `[${ts()}] Loading exploit framework modules...... [OK]`,
+      `[${ts()}] Initializing TOR relay chain (9 hops). [OK]`,
+      `[${ts()}] Connecting to C2 infrastructure........ [OK]`,
+      `[${ts()}] Syncing vulnerability DB (312,847 CVEs) [OK]`,
+      `[${ts()}] Calibrating packet injection engine.... [OK]`,
+      `[${ts()}] Spoofing MAC/IP/DNS identifiers........ [OK]`,
+      `[${ts()}] Establishing encrypted tunnels (x8).... [OK]`,
+      `[${ts()}] Deploying network sniffers (promiscuous) [OK]`,
+      `[${ts()}] Initializing GPU hash cracker (8x RTX) [OK]`,
+      `[${ts()}] Loading zero-day exploit cache......... [OK]`,
+      `[${ts()}] Compiling polymorphic payload engine... [OK]`,
+      `[${ts()}] Anti-forensics module initialized...... [OK]`,
+      `[${ts()}] SIGINT monitoring arrays online........ [OK]`,
+      "",
+      "System ready. All modules operational.",
+      `Session: ${randomHex(16)} | Operator: gh0st_r00t | Clearance: OMEGA`,
       "",
       ">>> INITIATING AUTONOMOUS ATTACK SEQUENCE <<<",
     ];
@@ -265,35 +285,23 @@ function BootSequence({ onComplete }: { onComplete: () => void }) {
       if (i < boot.length) {
         const line = boot[i];
         i++;
-        setBootLines((prev) => [...prev, line]);
+        setLines(prev => [...prev, line]);
       } else {
         clearInterval(interval);
         setTimeout(() => {
-          setBootDone(true);
-          setTimeout(onComplete, 1000);
-        }, 600);
+          setDone(true);
+          setTimeout(onComplete, 800);
+        }, 500);
       }
-    }, 150);
-
+    }, 120);
     return () => clearInterval(interval);
   }, [onComplete]);
 
   return (
-    <div style={{
-      background: "#000",
-      width: "100vw",
-      height: "100vh",
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center",
-      fontFamily: "'Courier New', monospace",
-      padding: 40,
-      position: "relative",
-    }}>
-      <MatrixRain />
-      <div style={{ zIndex: 10, maxWidth: 700, width: "100%" }}>
-        <pre className="glow" style={{ fontSize: 14, marginBottom: 30, textAlign: "center", userSelect: "none" }}>
+    <div style={{ background: "#000", width: "100vw", height: "100vh", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", padding: 40, position: "relative" }}>
+      <MatrixRain opacity={0.06} />
+      <div style={{ zIndex: 10, maxWidth: 720, width: "100%" }}>
+        <pre className="glow" style={{ fontSize: 13, marginBottom: 20, textAlign: "center", lineHeight: 1.15 }}>
 {`
  ███████╗██╗  ██╗ █████╗ ██████╗  ██████╗ ██╗    ██╗
  ██╔════╝██║  ██║██╔══██╗██╔══██╗██╔═══██╗██║    ██║
@@ -301,23 +309,45 @@ function BootSequence({ onComplete }: { onComplete: () => void }) {
  ╚════██║██╔══██║██╔══██║██║  ██║██║   ██║██║███╗██║
  ███████║██║  ██║██║  ██║██████╔╝╚██████╔╝╚███╔███╔╝
  ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝  ╚══╝╚══╝
-                  N E T W O R K
 `}
         </pre>
-        <div style={{ fontSize: 12, lineHeight: 1.8 }}>
-          {bootLines.map((line, i) => (
-            <div key={i} className={line.includes("[OK]") ? "glow" : line.includes(">>>") ? "glow-red warning-flash" : line.includes("Welcome") ? "glow-cyan" : ""}>
+        <div style={{ fontSize: 11, lineHeight: 1.7, fontFamily: "'Courier New', monospace" }}>
+          {lines.map((line, idx) => (
+            <div key={idx} className={
+              line.includes("[OK]") ? "glow" :
+              line.includes(">>>") ? "glow-red-strong warning-flash" :
+              line.includes("Operator") ? "glow-cyan" :
+              line.includes("═") ? "glow" : ""
+            }>
               {line}
             </div>
           ))}
-          {!bootDone && <span className="cursor-blink">█</span>}
+          {!done && <span className="cursor-blink" style={{ fontSize: 14 }}>█</span>}
         </div>
-        {bootDone && (
-          <div className="glow-red" style={{ textAlign: "center", marginTop: 20, fontSize: 14, fontWeight: "bold", letterSpacing: 4 }}>
+        {done && (
+          <div className="glow-red-strong" style={{ textAlign: "center", marginTop: 20, fontSize: 14, fontWeight: "bold", letterSpacing: 6 }}>
             ENTERING SHADOW MODE...
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Panel Wrapper ─────────────────────────────────────────────────
+function Panel({ title, status, statusClass, children }: {
+  title: string;
+  status: string;
+  statusClass?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <span className="panel-title">{title}</span>
+        <span className={`panel-status ${statusClass || ""}`}>{status}</span>
+      </div>
+      {children}
     </div>
   );
 }
@@ -329,309 +359,182 @@ function TerminalPanel() {
   const phaseRef = useRef(0);
   const targetRef = useRef(randomIP());
 
-  const generateLine = useCallback(() => {
-    const phase = phaseRef.current;
-    let line = "";
+  const gen = useCallback(() => {
+    const p = phaseRef.current;
+    const t = targetRef.current;
 
-    if (phase < 8) {
-      const scanLines = [
-        `root@shadow:~# nmap -sV -sC -O -A ${targetRef.current}`,
-        `Starting Nmap 7.94SVN ( https://nmap.org )`,
-        `Scanning ${targetRef.current} [65535 ports]...`,
-        `Discovered open port ${pick(PORTS)}/tcp on ${targetRef.current}`,
-        `Discovered open port ${pick(PORTS)}/tcp on ${targetRef.current}`,
-        `Discovered open port ${pick(PORTS)}/tcp on ${targetRef.current}`,
-        `OS detection: ${pick(OS_LIST)} | TTL: 64 | MAC: ${randomMAC()}`,
-        `Nmap done: 1 host up, scanned in 12.48 seconds`,
-      ];
-      line = scanLines[phase];
-    } else if (phase < 14) {
-      const vulnLines = [
-        `root@shadow:~# exploit-scanner --deep --target ${targetRef.current}`,
-        `[*] Loading vulnerability database (247,831 signatures)...`,
-        `[!] CRITICAL: ${pick(VULNS)}`,
-        `[!] HIGH: ${pick(VULNS)}`,
-        `[*] Generating exploit chain...`,
-        `[+] Exploit chain ready. Launching attack vector...`,
-      ];
-      line = vulnLines[phase - 8];
-    } else if (phase < 22) {
-      const attackLines = [
-        `root@shadow:~# payload-gen --type reverse_shell --encoder shikata_ga_nai`,
-        `[*] ${pick(EXPLOITS)}`,
-        `[*] ${pick(EXPLOITS)}`,
-        `[+] Shell session 1 opened (10.0.0.1:4444 -> ${targetRef.current}:${rand(49152, 65535)})`,
-        `[*] ${pick(EXPLOITS)}`,
-        `[+] Privilege escalation successful — UID=0(root)`,
-        `[*] Accessing ${pick(FILE_PATHS)}...`,
-        `[+] Data exfiltrated: ${rand(50, 500)}MB encrypted via ${pick(ENCRYPTION_ALGOS)}`,
-      ];
-      line = attackLines[phase - 14];
+    const phases: (() => string)[] = [
+      () => `root@shadow:~# nmap -sV -sC -O -A ${t}`,
+      () => `Starting Nmap 7.94SVN — https://nmap.org`,
+      () => `Scanning ${t} [65535 ports]...`,
+      () => `Discovered open port ${pick(PORTS)}/tcp on ${t}`,
+      () => `Discovered open port ${pick(PORTS)}/tcp on ${t}`,
+      () => `Discovered open port ${pick(PORTS)}/tcp on ${t}`,
+      () => `OS: ${pick(OS_LIST)} | TTL:64 | MAC:${randomMAC()}`,
+      () => `Nmap done: 1 IP (1 host up) scanned in ${(Math.random() * 20 + 5).toFixed(2)}s`,
+      () => ``,
+      () => `root@shadow:~# exploit-db --scan --deep ${t}`,
+      () => `[*] Loading vulnerability database (312,847 signatures)...`,
+      () => `[!] CRITICAL: ${pick(VULNS)}`,
+      () => `[!] HIGH: ${pick(VULNS)}`,
+      () => `[!] MEDIUM: ${pick(VULNS)}`,
+      () => `[+] Generating exploit chain... 3 vectors identified`,
+      () => ``,
+      () => `root@shadow:~# payload-gen --type meterpreter/reverse_tcp --encode shikata_ga_nai x5`,
+      () => `[*] ${pick(EXPLOITS)}`,
+      () => `[*] ${pick(EXPLOITS)}`,
+      () => `[+] Shell session opened (10.0.0.1:4444 → ${t}:${rand(49152, 65535)})`,
+      () => `[*] ${pick(EXPLOITS)}`,
+      () => `[*] ${pick(EXPLOITS)}`,
+      () => `[+] PRIVILEGE ESCALATION → UID=0(root) GID=0(root)`,
+      () => `[*] Accessing ${pick(FILE_PATHS)}...`,
+      () => `[*] Accessing ${pick(FILE_PATHS)}...`,
+      () => `[+] Data exfiltrated: ${rand(50, 800)}MB via ${pick(ENCRYPTION)}`,
+      () => `[+] Persistence: ${pick(["cron job", "systemd service", "registry run key", "WMI subscription"])}`,
+      () => `[$] Session complete. Cleaning traces...`,
+    ];
+
+    let line: string;
+    if (p < phases.length) {
+      line = phases[p]();
     } else {
       phaseRef.current = -1;
       targetRef.current = randomIP();
-      line = `\n[$] Session complete. Rotating to next target: ${targetRef.current}\n`;
+      line = `\n[$] Rotating target → ${targetRef.current}\n`;
     }
-
     phaseRef.current++;
     return line;
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setLines((prev) => {
-        const next = [...prev, generateLine()];
-        return next.length > 100 ? next.slice(-60) : next;
+    const id = setInterval(() => {
+      setLines(prev => {
+        const next = [...prev, gen()];
+        return next.length > 150 ? next.slice(-80) : next;
       });
-    }, rand(200, 600));
-    return () => clearInterval(interval);
-  }, [generateLine]);
+    }, rand(150, 500));
+    return () => clearInterval(id);
+  }, [gen]);
 
   useEffect(() => {
-    if (bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
+    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
   }, [lines]);
 
   return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>Terminal // root@shadow-net</span>
-        <span className="glow-red">● LIVE</span>
-      </div>
-      <div ref={bodyRef} className="panel-body overflow-y-auto font-mono" style={{ fontSize: "10.5px" }}>
+    <Panel title="Terminal // root@shadow-net" status="● LIVE" statusClass="glow-red">
+      <div ref={bodyRef} className="panel-body scrollable" style={{ fontSize: "9.5px" }}>
         {lines.map((l, i) => (
-          <div key={i} className={l.startsWith("[!]") ? "glow-red" : l.startsWith("[+]") ? "glow" : ""}>
-            {l}
-          </div>
+          <div key={i} className={
+            l.startsWith("[!]") ? "glow-red" :
+            l.startsWith("[+]") ? "glow" :
+            l.startsWith("[$]") ? "glow-cyan" :
+            l.startsWith("root@") ? "glow" : ""
+          }>{l}</div>
         ))}
         <span className="cursor-blink">█</span>
       </div>
-    </div>
+    </Panel>
   );
 }
 
 // ─── Network Monitor ───────────────────────────────────────────────
 function NetworkMonitor() {
-  const [packets, setPackets] = useState<string[]>([]);
+  const [pkts, setPkts] = useState<string[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       const proto = pick(PROTOCOLS);
-      const src = randomIP();
-      const dst = randomIP();
-      const port = pick(PORTS);
-      const size = rand(40, 1500);
-      const flags = pick(["SYN", "ACK", "SYN-ACK", "PSH-ACK", "FIN", "RST", "URG"]);
-      const line = `${timestamp()} ${proto.padEnd(5)} ${src}:${rand(1024, 65535)} → ${dst}:${port} [${flags}] ${size}B`;
-      setPackets((prev) => {
+      const line = `${ts()} ${proto.padEnd(7)} ${randomIP()}:${rand(1024, 65535)} → ${randomIP()}:${pick(PORTS)} [${pick(["SYN", "ACK", "SYN-ACK", "PSH-ACK", "FIN", "RST", "URG"])}] ${rand(40, 1500)}B`;
+      setPkts(prev => {
         const next = [...prev, line];
-        return next.length > 80 ? next.slice(-50) : next;
+        return next.length > 100 ? next.slice(-60) : next;
       });
-    }, rand(80, 250));
-    return () => clearInterval(interval);
+    }, rand(60, 200));
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-  }, [packets]);
+  }, [pkts]);
 
   return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>Network Traffic // Packet Capture</span>
-        <span className="glow-cyan">◉ SNIFFING</span>
-      </div>
-      <div ref={bodyRef} className="panel-body overflow-y-auto" style={{ fontSize: "9.5px" }}>
-        {packets.map((p, i) => (
-          <div key={i} className={p.includes("RST") || p.includes("FIN") ? "glow-red" : p.includes("SYN-ACK") ? "glow-cyan" : ""} style={{ opacity: 0.9 }}>
-            {p}
-          </div>
+    <Panel title="Packet Capture // tcpdump" status="◉ SNIFFING" statusClass="glow-cyan">
+      <div ref={bodyRef} className="panel-body scrollable" style={{ fontSize: "8.5px" }}>
+        {pkts.map((p, i) => (
+          <div key={i} className={p.includes("RST") || p.includes("FIN") ? "glow-red" : p.includes("SYN-ACK") ? "glow-cyan" : ""} style={{ opacity: 0.85 }}>{p}</div>
         ))}
       </div>
-    </div>
+    </Panel>
   );
 }
 
 // ─── Password Cracker ──────────────────────────────────────────────
 function PasswordCracker() {
-  const [entries, setEntries] = useState<{ hash: string; pass: string; status: string }[]>([]);
+  const [entries, setEntries] = useState<{ hash: string; pass: string; found: boolean }[]>([]);
   const [rate, setRate] = useState(0);
   const [cracked, setCracked] = useState(0);
-  const [total] = useState(rand(200, 500));
+  const [total] = useState(() => rand(200, 500));
+  const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const found = Math.random() > 0.6;
-      const passwords = ["admin123", "P@ssw0rd!", "letmein", "dragon2024", "trustno1", "hunter2", "qwerty!@#", "shadow_root", "master666", "iloveyou", "password1!", "welcome1", "monkey123", "abc123!@#", "starwars99"];
-      const entry = {
-        hash: randomHex(32),
-        pass: found ? pick(passwords) : "...",
-        status: found ? "CRACKED" : "TESTING",
-      };
-      setEntries((prev) => {
-        const next = [...prev, entry];
-        return next.length > 30 ? next.slice(-20) : next;
+    const id = setInterval(() => {
+      const found = Math.random() > 0.55;
+      const passwords = ["admin123", "P@ssw0rd!", "letmein", "dragon2024", "trustno1", "hunter2", "qwerty!@#", "shadow_root", "master666", "iloveyou", "password1!", "welcome1", "monkey123", "abc123!@#", "starwars99", "football99", "123456789", "superman1"];
+      setEntries(prev => {
+        const next = [...prev, { hash: randomHex(32), pass: found ? pick(passwords) : "", found }];
+        return next.length > 40 ? next.slice(-25) : next;
       });
-      setRate(rand(850000, 1250000));
-      if (found) setCracked((p) => p + 1);
-    }, rand(300, 800));
-    return () => clearInterval(interval);
+      setRate(rand(850000, 1350000));
+      if (found) setCracked(p => p + 1);
+    }, rand(250, 700));
+    return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+  }, [entries]);
+
+  const pct = Math.min((cracked / total) * 100, 99.9);
+
   return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>Hash Cracker // Hashcat v7.0</span>
-        <span className="glow-yellow">⚡ {(rate / 1000000).toFixed(2)} MH/s</span>
-      </div>
-      <div className="panel-body overflow-y-auto" style={{ fontSize: "9.5px" }}>
-        <div style={{ marginBottom: 6, color: "#00ffff" }}>
-          Progress: {cracked}/{total} cracked ({((cracked / total) * 100).toFixed(1)}%)
+    <Panel title="Hash Cracker // Hashcat v7.0" status={`⚡ ${(rate / 1e6).toFixed(2)} MH/s`} statusClass="glow-yellow">
+      <div className="panel-body scrollable" style={{ fontSize: "9px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span className="glow-cyan" style={{ fontSize: "9px" }}>{cracked}/{total} cracked ({pct.toFixed(1)}%)</span>
+          <span style={{ fontSize: "8px", color: "#666" }}>SHA-256 | GPU x8</span>
         </div>
-        <div style={{ height: 6, background: "#001a00", borderRadius: 3, marginBottom: 8, border: "1px solid #003300" }}>
-          <div className="progress-bar" style={{ width: `${Math.min((cracked / total) * 100, 100)}%`, borderRadius: 3 }} />
+        <div className="progress-track" style={{ marginBottom: 6 }}>
+          <div className="progress-fill" style={{ width: `${pct}%` }} />
         </div>
-        {entries.map((e, i) => (
-          <div key={i} className={e.status === "CRACKED" ? "glow" : ""} style={{ opacity: e.status === "CRACKED" ? 1 : 0.5 }}>
-            {e.hash.slice(0, 16)}... → {e.status === "CRACKED" ? (
-              <span style={{ color: "#00ff41" }}>{e.pass}</span>
-            ) : (
-              <span style={{ color: "#666" }}>{randomHex(8)}</span>
-            )}
-            {" "}[{e.status}]
-          </div>
-        ))}
+        <div ref={bodyRef} style={{ overflow: "auto", flex: 1 }}>
+          {entries.map((e, i) => (
+            <div key={i} className={e.found ? "glow" : ""} style={{ opacity: e.found ? 1 : 0.4 }}>
+              {e.hash.slice(0, 16)}… → {e.found ? <span style={{ color: "#00ff41" }}>{e.pass}</span> : <span style={{ color: "#333" }}>{randomHex(8)}</span>} [{e.found ? "CRACKED" : "TESTING"}]
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </Panel>
   );
 }
 
-// ─── Port Scanner ──────────────────────────────────────────────────
-function PortScanner() {
-  const [hosts, setHosts] = useState<{ ip: string; ports: { port: number; service: string; state: string }[] }[]>([]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const ip = randomIP();
-      const numPorts = rand(2, 5);
-      const ports = Array.from({ length: numPorts }, () => {
-        const idx = rand(0, PORTS.length - 1);
-        return {
-          port: PORTS[idx],
-          service: SERVICES[idx],
-          state: Math.random() > 0.2 ? "open" : "filtered",
-        };
-      });
-      setHosts((prev) => {
-        const next = [...prev, { ip, ports }];
-        return next.length > 15 ? next.slice(-10) : next;
-      });
-    }, rand(1500, 3000));
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>Port Scanner // Subnet Sweep</span>
-        <span style={{ color: "#00ff41" }}>◌ SCANNING</span>
-      </div>
-      <div className="panel-body overflow-y-auto" style={{ fontSize: "9.5px" }}>
-        {hosts.map((h, i) => (
-          <div key={i} style={{ marginBottom: 6 }}>
-            <div className="glow-cyan">{h.ip}</div>
-            {h.ports.map((p, j) => (
-              <div key={j} style={{ paddingLeft: 12 }}>
-                <span style={{ color: p.state === "open" ? "#00ff41" : "#ff6600" }}>
-                  {p.port.toString().padEnd(6)}
-                </span>
-                <span style={{ color: "#888" }}>{p.state.padEnd(10)}</span>
-                <span>{p.service}</span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// ─── System Stats ──────────────────────────────────────────────────
-function SystemStats() {
-  const [stats, setStats] = useState({ cpu: 0, mem: 0, net: 0, threads: 0, proxies: 0 });
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStats({
-        cpu: rand(45, 98),
-        mem: rand(60, 95),
-        net: rand(100, 950),
-        threads: rand(128, 512),
-        proxies: rand(8, 24),
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const bar = (pct: number, color: string) => (
-    <div style={{ height: 4, background: "#001a00", borderRadius: 2, flex: 1, marginLeft: 8 }}>
-      <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 2, transition: "width 0.5s", boxShadow: `0 0 6px ${color}` }} />
-    </div>
-  );
-
-  return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>System Monitor</span>
-        <span style={{ color: stats.cpu > 90 ? "#ff0040" : "#00ff41" }}>
-          {stats.cpu > 90 ? "⚠ HIGH LOAD" : "● NOMINAL"}
-        </span>
-      </div>
-      <div className="panel-body" style={{ fontSize: "10px" }}>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
-          <span style={{ width: 90 }}>CPU Usage:</span>
-          {bar(stats.cpu, stats.cpu > 85 ? "#ff0040" : "#00ff41")}
-          <span style={{ marginLeft: 8, width: 35, textAlign: "right" }}>{stats.cpu}%</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
-          <span style={{ width: 90 }}>Memory:</span>
-          {bar(stats.mem, stats.mem > 85 ? "#ff6600" : "#00ff41")}
-          <span style={{ marginLeft: 8, width: 35, textAlign: "right" }}>{stats.mem}%</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}>
-          <span style={{ width: 90 }}>Network I/O:</span>
-          <span className="glow-cyan" style={{ marginLeft: 8 }}>{stats.net} MB/s</span>
-        </div>
-        <div style={{ display: "flex", gap: 16, marginTop: 4 }}>
-          <span>Threads: <span className="glow">{stats.threads}</span></span>
-          <span>Proxy Chain: <span className="glow-yellow">{stats.proxies} nodes</span></span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Hex Dump Viewer ───────────────────────────────────────────────
+// ─── Hex Dump ──────────────────────────────────────────────────────
 function HexDump() {
   const [lines, setLines] = useState<string[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const offset = rand(0, 0xffff).toString(16).padStart(8, "0");
+    const id = setInterval(() => {
+      const off = rand(0, 0xfffff).toString(16).padStart(8, "0");
       const bytes = Array.from({ length: 16 }, () => randomHex(2)).join(" ");
-      const ascii = Array.from({ length: 16 }, () => {
-        const c = rand(33, 126);
-        return String.fromCharCode(c);
-      }).join("");
-      setLines((prev) => {
-        const next = [...prev, `0x${offset}  ${bytes}  |${ascii}|`];
-        return next.length > 50 ? next.slice(-30) : next;
+      const ascii = Array.from({ length: 16 }, () => String.fromCharCode(rand(33, 126))).join("");
+      setLines(prev => {
+        const next = [...prev, `0x${off}  ${bytes}  |${ascii}|`];
+        return next.length > 60 ? next.slice(-35) : next;
       });
-    }, rand(100, 300));
-    return () => clearInterval(interval);
+    }, rand(60, 180));
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -639,43 +542,41 @@ function HexDump() {
   }, [lines]);
 
   return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>Memory Dump // 0xDEADBEEF</span>
-        <span className="glow">READING</span>
-      </div>
-      <div ref={bodyRef} className="panel-body overflow-y-auto" style={{ fontSize: "9px", fontFamily: "monospace", letterSpacing: "0.5px" }}>
+    <Panel title="Memory Dump // 0xDEADBEEF" status="READING" statusClass="glow">
+      <div ref={bodyRef} className="panel-body scrollable" style={{ fontSize: "8px", letterSpacing: "0.3px" }}>
         {lines.map((l, i) => (
-          <div key={i} style={{ color: i % 5 === 0 ? "#00ffff" : "#00ff41", opacity: 0.85 }}>{l}</div>
+          <div key={i} style={{ color: i % 7 === 0 ? "#00ffff" : "#00ff41", opacity: 0.8 }}>{l}</div>
         ))}
       </div>
-    </div>
+    </Panel>
   );
 }
 
-// ─── Crypto Decryptor ──────────────────────────────────────────────
-function CryptoDecryptor() {
+// ─── Crypto Engine ─────────────────────────────────────────────────
+function CryptoEngine() {
   const [logs, setLogs] = useState<string[]>([]);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       const actions = [
-        `[DECRYPT] ${pick(ENCRYPTION_ALGOS)} key: ${randomHex(32)}`,
+        `[DECRYPT] ${pick(ENCRYPTION)} key: ${randomHex(32)}`,
         `[KEYGEN] Generating ${rand(2048, 4096)}-bit RSA keypair...`,
-        `[VERIFY] Certificate fingerprint: SHA256:${randomHex(32)}`,
-        `[CRACK]  Rainbow table lookup: ${HASHES().slice(0, 40)}...`,
+        `[VERIFY] Cert fingerprint: SHA256:${randomHex(32)}`,
+        `[CRACK]  Rainbow table: ${randomHex(40)}…`,
         `[INJECT] Session token forged: ${randomHex(24)}`,
-        `[BYPASS] TLS pinning disabled on target process`,
-        `[MITM]   Intercepted ${pick(ENCRYPTION_ALGOS)} handshake`,
-        `[DUMP]   Private key extracted: ${randomHex(20)}...`,
+        `[BYPASS] TLS cert pinning disabled on PID ${rand(1000, 65535)}`,
+        `[MITM]   Intercepted ${pick(ENCRYPTION)} handshake`,
+        `[DUMP]   Private key extracted: -----BEGIN RSA KEY-----`,
+        `[FORGE]  JWT crafted: alg=none, sub=admin, exp=∞`,
+        `[STRIP]  SSL downgrade: TLS1.3 → TLS1.0 (POODLE)`,
       ];
-      setLogs((prev) => {
+      setLogs(prev => {
         const next = [...prev, pick(actions)];
-        return next.length > 40 ? next.slice(-25) : next;
+        return next.length > 50 ? next.slice(-30) : next;
       });
-    }, rand(400, 1000));
-    return () => clearInterval(interval);
+    }, rand(350, 900));
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
@@ -683,77 +584,13 @@ function CryptoDecryptor() {
   }, [logs]);
 
   return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>Crypto Engine // Decryptor</span>
-        <span className="glow-yellow">🔓 ACTIVE</span>
-      </div>
-      <div ref={bodyRef} className="panel-body overflow-y-auto" style={{ fontSize: "9.5px" }}>
+    <Panel title="Crypto Engine // Decryptor" status="🔓 ACTIVE" statusClass="glow-yellow">
+      <div ref={bodyRef} className="panel-body scrollable" style={{ fontSize: "9px" }}>
         {logs.map((l, i) => (
-          <div key={i} className={l.includes("[CRACK]") ? "glow-red" : l.includes("[DUMP]") ? "glow" : ""}>
-            {l}
-          </div>
+          <div key={i} className={l.includes("[CRACK]") || l.includes("[DUMP]") ? "glow-red" : l.includes("[INJECT]") || l.includes("[FORGE]") ? "glow" : ""}>{l}</div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ─── Targets / World Map (ASCII) ───────────────────────────────────
-function TargetMap() {
-  const [targets, setTargets] = useState<{ ip: string; loc: string; status: string }[]>([]);
-  const locations = ["Tokyo, JP", "New York, US", "London, UK", "Berlin, DE", "Sydney, AU", "Mumbai, IN", "São Paulo, BR", "Seoul, KR", "Moscow, RU", "Cairo, EG", "Toronto, CA", "Singapore, SG", "Dubai, AE", "Paris, FR", "Lagos, NG", "Beijing, CN"];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const statuses = ["COMPROMISED", "SCANNING", "EXPLOITING", "BACKDOORED", "EXFILTRATING"];
-      setTargets((prev) => {
-        const next = [...prev, {
-          ip: randomIP(),
-          loc: pick(locations),
-          status: pick(statuses),
-        }];
-        return next.length > 18 ? next.slice(-12) : next;
-      });
-    }, rand(1500, 3500));
-    return () => clearInterval(interval);
-  }, []);
-
-  const statusColor = (s: string) => {
-    if (s === "COMPROMISED" || s === "BACKDOORED") return "#ff0040";
-    if (s === "EXFILTRATING") return "#ffff00";
-    if (s === "EXPLOITING") return "#ff6600";
-    return "#00ffff";
-  };
-
-  return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>Global Target Map // GeoTrace</span>
-        <span className="glow-red">⊕ {targets.length} TARGETS</span>
-      </div>
-      <div className="panel-body overflow-y-auto" style={{ fontSize: "10px" }}>
-        <pre style={{ color: "#003300", fontSize: "6.5px", lineHeight: "7.5px", marginBottom: 6, userSelect: "none" }}>
-{`    .--.          .--.   .--.          .--.
-  .'    \\  ____  /    '. '    \\  ____  /    '.
- /  .-. _\\/    \\/_ .-. \\ .-. _\\/    \\/_ .-. \\
-| |    ( o    o  ) |  | |    ( o    o  ) |  |
- \\  '-./\\______/\\.-'  /  '-./\\______/\\.-'  /
-  '.    \\/      \\/   .'    \\/      \\/   .'
-    '--'          '--''--'          '--'`}
-        </pre>
-        <div style={{ borderTop: "1px solid #003300", paddingTop: 4 }}>
-          {targets.map((t, i) => (
-            <div key={i} style={{ display: "flex", gap: 8, marginBottom: 2 }}>
-              <span style={{ color: statusColor(t.status), width: 14, textAlign: "center" }}>●</span>
-              <span style={{ width: 120, fontSize: "9.5px" }}>{t.ip}</span>
-              <span style={{ color: "#00ffff", width: 100, fontSize: "9.5px" }}>{t.loc}</span>
-              <span style={{ color: statusColor(t.status), fontWeight: "bold", fontSize: "9.5px" }}>{t.status}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    </Panel>
   );
 }
 
@@ -763,58 +600,139 @@ function EventLog() {
   const bodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const severities = ["INFO", "WARN", "CRIT", "ALERT"];
-      const messages = [
-        "Firewall rule bypassed on gateway node",
-        "New proxy chain established (TOR + 3 VPN nodes)",
-        "IDS signature evasion: polymorphic encoding active",
-        "Zero-day exploit loaded into memory",
-        "Anti-forensics: log rotation triggered on target",
-        "Lateral movement detected in subnet 10.0.0.0/24",
-        "Credential dump complete: 2,847 entries",
-        "Encrypted tunnel established via port 443",
-        "Blockchain mixer transaction initiated",
-        "Shadow copy deletion in progress on target DC",
-        "New C2 beacon registered from compromised host",
-        "Firmware rootkit deployed to target BMC",
-        "DNS rebinding attack successful",
-        "SIEM alert suppression active on target network",
-        "Persistence mechanism installed: scheduled task",
-        "Memory-resident payload injected into svchost.exe",
-      ];
-      const sev = pick(severities);
-      const msg = `[${timestamp()}] [${sev}] ${pick(messages)}`;
-      setEvents((prev) => {
-        const next = [...prev, msg];
-        return next.length > 50 ? next.slice(-30) : next;
+    const msgs = [
+      "Firewall rule bypassed on perimeter gateway",
+      "New proxy chain: TOR → VPN(CH) → VPN(IS) → VPN(PA)",
+      "IDS evasion: polymorphic encoding + fragmentation",
+      "Zero-day exploit staged in memory (fileless)",
+      "Anti-forensics: log tampering on target syslog",
+      "Lateral movement: subnet 10.0.0.0/24 enumerated",
+      "Credential dump: 12,847 NTLM hashes extracted",
+      "Encrypted tunnel via DNS-over-HTTPS (DoH)",
+      "Blockchain mixer: 4 rounds complete, 99.7% anonymity",
+      "Shadow copy deletion on target domain controller",
+      "C2 beacon check-in from compromised host",
+      "UEFI rootkit deployed to target BMC/IPMI",
+      "DNS rebinding attack: internal service exposed",
+      "SIEM alert suppression: rule ID 4625 disabled",
+      "WMI persistence: event subscription installed",
+      "AMSI bypass: patching amsi.dll in-memory",
+      "Kerberoasting: 47 SPN tickets captured",
+      "BloodHound path: User → Admin in 3 hops",
+    ];
+    const id = setInterval(() => {
+      const sev = pick(["INFO", "INFO", "WARN", "CRIT", "ALERT"]);
+      setEvents(prev => {
+        const next = [...prev, `[${ts()}] [${sev.padEnd(5)}] ${pick(msgs)}`];
+        return next.length > 60 ? next.slice(-35) : next;
       });
-    }, rand(500, 1500));
-    return () => clearInterval(interval);
+    }, rand(400, 1200));
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
   }, [events]);
 
-  const sevColor = (line: string) => {
-    if (line.includes("[CRIT]") || line.includes("[ALERT]")) return "glow-red";
-    if (line.includes("[WARN]")) return "glow-yellow";
-    return "";
-  };
-
   return (
-    <div className="panel h-full">
-      <div className="panel-header">
-        <span>Event Log // SHADOW_NET</span>
-        <span className="pulse" style={{ color: "#ff6600" }}>▲ EVENTS</span>
-      </div>
-      <div ref={bodyRef} className="panel-body overflow-y-auto" style={{ fontSize: "9.5px" }}>
+    <Panel title="Event Log // SHADOW_NET" status="▲ EVENTS" statusClass="pulse glow-orange">
+      <div ref={bodyRef} className="panel-body scrollable" style={{ fontSize: "9px" }}>
         {events.map((e, i) => (
-          <div key={i} className={sevColor(e)}>{e}</div>
+          <div key={i} className={
+            e.includes("[CRIT ]") || e.includes("[ALERT]") ? "log-alert" :
+            e.includes("[WARN ]") ? "log-warn" : "log-info"
+          }>{e}</div>
         ))}
       </div>
+    </Panel>
+  );
+}
+
+// ─── System Monitor with Sparklines ────────────────────────────────
+function SystemMonitor() {
+  const [stats, setStats] = useState({ cpu: 72, mem: 68, gpu: 94, net: 450, disk: 220, threads: 256, proxies: 12, sessions: 4 });
+  const cpuHistory = useRef<number[]>(Array.from({ length: 40 }, () => rand(40, 95)));
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const cpu = rand(45, 98);
+      cpuHistory.current.push(cpu);
+      if (cpuHistory.current.length > 40) cpuHistory.current.shift();
+      setStats({
+        cpu,
+        mem: rand(60, 95),
+        gpu: rand(88, 99),
+        net: rand(100, 950),
+        disk: rand(50, 400),
+        threads: rand(128, 512),
+        proxies: rand(8, 24),
+        sessions: rand(2, 12),
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const data = cpuHistory.current;
+    const step = w / (data.length - 1);
+
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, "rgba(0, 255, 65, 0.3)");
+    grad.addColorStop(1, "rgba(0, 255, 65, 0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(0, h);
+    data.forEach((v, i) => ctx.lineTo(i * step, h - (v / 100) * h));
+    ctx.lineTo(w, h);
+    ctx.fill();
+
+    ctx.strokeStyle = "#00ff41";
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = "#00ff41";
+    ctx.shadowBlur = 4;
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = i * step;
+      const y = h - (v / 100) * h;
+      if (i === 0) { ctx.moveTo(x, y); } else { ctx.lineTo(x, y); }
+    });
+    ctx.stroke();
+  }, [stats]);
+
+  const bar = (label: string, val: number, max: number, color: string) => (
+    <div style={{ display: "flex", alignItems: "center", marginBottom: 4, fontSize: "9px" }}>
+      <span style={{ width: 42, flexShrink: 0 }}>{label}</span>
+      <div className="bar-track" style={{ marginLeft: 6, marginRight: 6 }}>
+        <div className={`bar-fill bar-fill-${color}`} style={{ width: `${(val / max) * 100}%` }} />
+      </div>
+      <span style={{ width: 42, textAlign: "right", flexShrink: 0 }}>{val}{max === 100 ? "%" : "MB/s"}</span>
     </div>
+  );
+
+  return (
+    <Panel title="System Monitor" status={stats.cpu > 90 ? "⚠ HIGH" : "● OK"} statusClass={stats.cpu > 90 ? "glow-red fast-pulse" : "glow"}>
+      <div className="panel-body" style={{ fontSize: "9px" }}>
+        <canvas ref={canvasRef} width={200} height={35} style={{ width: "100%", height: 35, marginBottom: 6 }} />
+        {bar("CPU", stats.cpu, 100, stats.cpu > 85 ? "red" : "green")}
+        {bar("MEM", stats.mem, 100, stats.mem > 85 ? "orange" : "green")}
+        {bar("GPU", stats.gpu, 100, "yellow")}
+        {bar("NET", stats.net, 1000, "green")}
+        <div style={{ display: "flex", gap: 10, marginTop: 4, fontSize: "8.5px", color: "#888" }}>
+          <span>THR: <span className="glow">{stats.threads}</span></span>
+          <span>PRX: <span className="glow-yellow">{stats.proxies}</span></span>
+          <span>SESS: <span className="glow-cyan">{stats.sessions}</span></span>
+        </div>
+      </div>
+    </Panel>
   );
 }
 
@@ -824,14 +742,14 @@ function TopBar() {
   const [uptime, setUptime] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       setTime(new Date().toISOString().replace("T", " ").slice(0, 19));
-      setUptime((p) => p + 1);
+      setUptime(p => p + 1);
     }, 1000);
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, []);
 
-  const formatUptime = (s: number) => {
+  const fmt = (s: number) => {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
@@ -839,143 +757,135 @@ function TopBar() {
   };
 
   return (
-    <div style={{
-      background: "rgba(0, 20, 0, 0.95)",
-      borderBottom: "1px solid #00ff41",
-      padding: "6px 16px",
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      fontSize: "11px",
-      letterSpacing: "1px",
-      zIndex: 10,
-      position: "relative",
-    }}>
-      <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-        <span className="glow" style={{ fontSize: 14, fontWeight: "bold" }}>
-          ◈ SHADOW_NET v4.2.1
-        </span>
-        <span style={{ color: "#666" }}>|</span>
-        <span style={{ color: "#ff0040" }}>■ CLASSIFIED</span>
-        <span style={{ color: "#666" }}>|</span>
-        <span>OPERATOR: <span className="glow-cyan">gh0st_r00t</span></span>
+    <div className="top-bar">
+      <div className="top-bar-section">
+        <span className="glow-strong" style={{ fontSize: 12, fontWeight: "bold" }}>◈ SHADOW_NET v4.2.1</span>
+        <span className="top-bar-divider">│</span>
+        <span className="glow-red" style={{ fontSize: 9, letterSpacing: 2 }}>■ CLASSIFIED</span>
+        <span className="top-bar-divider">│</span>
+        <span style={{ fontSize: 9 }}>OPERATOR: <span className="glow-cyan">gh0st_r00t</span></span>
+        <span className="top-bar-divider">│</span>
+        <span style={{ fontSize: 9 }}>CLEARANCE: <span className="glow-yellow">OMEGA</span></span>
       </div>
-      <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-        <span>UPTIME: <span style={{ color: "#ffff00" }}>{formatUptime(uptime)}</span></span>
-        <span style={{ color: "#666" }}>|</span>
-        <span>SESSION: <span style={{ color: "#00ff41" }}>{randomHex(8)}</span></span>
-        <span style={{ color: "#666" }}>|</span>
-        <span style={{ color: "#00ffff" }}>{time} UTC</span>
+      <div className="top-bar-section">
+        <span style={{ fontSize: 9 }}>UP: <span style={{ color: "#ffff00" }}>{fmt(uptime)}</span></span>
+        <span className="top-bar-divider">│</span>
+        <span style={{ fontSize: 9, color: "#00ffff" }}>{time} UTC</span>
       </div>
     </div>
   );
 }
 
-// ─── Bottom ticker ─────────────────────────────────────────────────
-function EventTicker() {
+// ─── Bottom Ticker ─────────────────────────────────────────────────
+function BottomBar() {
   const [text, setText] = useState("");
-  const msgs = [
-    "Target compromised: financial sector gateway",
-    "Exfiltrating 2.4TB encrypted payload via covert channel",
-    "New zero-day acquired from dark market",
-    "Rotating proxy chain through 12 jurisdictions",
-    "Deploying persistence mechanisms on 47 nodes",
-    "Anti-forensics: wiping volatile memory traces",
-    "Lateral movement in progress: domain controller access gained",
-    "Blockchain laundering: 4 mixing rounds complete",
-  ];
+  const msgsRef = useRef([
+    "ACTIVE OPS: Financial sector gateway compromised — exfiltrating transaction logs",
+    "ALERT: New zero-day acquired from darknet market — CVE pending assignment",
+    "STATUS: Proxy chain rotating through 12 jurisdictions — no correlation possible",
+    "PROGRESS: Persistence mechanisms deployed on 47 nodes across 3 continents",
+    "OPSEC: Anti-forensics active — wiping volatile memory traces on all targets",
+    "LATERAL: Domain controller access gained — full AD enumeration in progress",
+    "CRYPTO: Blockchain mixing complete — 4 rounds, 99.7% transaction anonymity",
+    "SIGINT: Intercepted encrypted communications from target C-suite",
+  ]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setText(pick(msgs));
-    }, 3000);
-    setText(pick(msgs));
-    return () => clearInterval(interval);
+    const msgs = msgsRef.current;
+    setText(msgs[0]);
+    const id = setInterval(() => setText(pick(msgs)), 4000);
+    return () => clearInterval(id);
   }, []);
 
-  return <span className="glow-red">{text}</span>;
+  return (
+    <div className="bottom-bar">
+      <span>SHADOW_NET // AUTONOMOUS ATTACK FRAMEWORK // ALL SYSTEMS OPERATIONAL</span>
+      <span className="glow-red" style={{ fontSize: 8 }}>{text}</span>
+    </div>
+  );
 }
 
-// ─── Main Page ─────────────────────────────────────────────────────
+// ─── Main Dashboard ────────────────────────────────────────────────
 export default function HackerDashboard() {
   const [stage, setStage] = useState<"entry" | "boot" | "dashboard">("entry");
 
-  const handleEnter = useCallback(() => {
-    setStage("boot");
-  }, []);
+  const handleEnter = useCallback(() => setStage("boot"), []);
+  const handleBoot = useCallback(() => setStage("dashboard"), []);
 
-  const handleBootComplete = useCallback(() => {
-    setStage("dashboard");
-  }, []);
-
-  if (stage === "entry") {
-    return <EntryScreen onEnter={handleEnter} />;
-  }
-
-  if (stage === "boot") {
-    return <BootSequence onComplete={handleBootComplete} />;
-  }
+  if (stage === "entry") return <EntryScreen onEnter={handleEnter} />;
+  if (stage === "boot") return <BootSequence onComplete={handleBoot} />;
 
   return (
-    <div style={{ width: "100vw", height: "100vh", display: "flex", flexDirection: "column", background: "#000", overflow: "hidden" }}>
-      <MatrixRain />
-      <div style={{ position: "relative", zIndex: 10, display: "flex", flexDirection: "column", height: "100vh" }}>
+    <div className="dashboard">
+      <MatrixRain opacity={0.07} />
+      <NoiseOverlay />
+      <div className="crt-overlay" />
+      <div className="dashboard-content crt-flicker glitch-container">
         <TopBar />
-        <div style={{
-          flex: 1,
-          display: "grid",
-          gridTemplateColumns: "1fr 1fr 1fr",
-          gridTemplateRows: "1fr 1fr 1fr",
-          gap: 4,
-          padding: 4,
-          overflow: "hidden",
-        }}>
-          {/* Row 1 */}
-          <div style={{ gridColumn: "1 / 2", gridRow: "1 / 3" }}>
+        <div className="dashboard-grid">
+          {/* Row 1-2, Col 1: Terminal (tall) */}
+          <div style={{ gridColumn: "1", gridRow: "1 / 3" }}>
             <TerminalPanel />
           </div>
-          <div style={{ gridColumn: "2 / 3", gridRow: "1 / 2" }}>
-            <NetworkMonitor />
+
+          {/* Row 1, Col 2-3: World Map (wide) */}
+          <div style={{ gridColumn: "2 / 4", gridRow: "1" }}>
+            <Panel title="Global Attack Map // GeoTrace v3.1" status="⊕ TRACKING" statusClass="glow-red">
+              <div className="panel-body" style={{ padding: 0 }}>
+                <WorldMap />
+              </div>
+            </Panel>
           </div>
-          <div style={{ gridColumn: "3 / 4", gridRow: "1 / 2" }}>
+
+          {/* Row 1, Col 4: System Monitor */}
+          <div style={{ gridColumn: "4", gridRow: "1" }}>
+            <SystemMonitor />
+          </div>
+
+          {/* Row 2, Col 2: Network Graph */}
+          <div style={{ gridColumn: "2", gridRow: "2" }}>
+            <Panel title="Network Topology // Live" status="◉ MAPPING" statusClass="glow-cyan">
+              <div className="panel-body" style={{ padding: 0 }}>
+                <NetworkGraph />
+              </div>
+            </Panel>
+          </div>
+
+          {/* Row 2, Col 3: Password Cracker */}
+          <div style={{ gridColumn: "3", gridRow: "2" }}>
             <PasswordCracker />
           </div>
 
-          {/* Row 2 */}
-          <div style={{ gridColumn: "2 / 3", gridRow: "2 / 3" }}>
-            <TargetMap />
-          </div>
-          <div style={{ gridColumn: "3 / 4", gridRow: "2 / 3" }}>
-            <CryptoDecryptor />
+          {/* Row 2, Col 4: Crypto Engine */}
+          <div style={{ gridColumn: "4", gridRow: "2" }}>
+            <CryptoEngine />
           </div>
 
-          {/* Row 3 */}
-          <div style={{ gridColumn: "1 / 2", gridRow: "3 / 4" }}>
-            <PortScanner />
+          {/* Row 3, Col 1: Network Monitor */}
+          <div style={{ gridColumn: "1", gridRow: "3" }}>
+            <NetworkMonitor />
           </div>
-          <div style={{ gridColumn: "2 / 3", gridRow: "3 / 4" }}>
+
+          {/* Row 3, Col 2: Audio Waveform (SIGINT) */}
+          <div style={{ gridColumn: "2", gridRow: "3" }}>
+            <Panel title="SIGINT // Signal Intercept" status="◈ MONITORING" statusClass="glow-cyan">
+              <div className="panel-body" style={{ padding: 0 }}>
+                <AudioWaveform />
+              </div>
+            </Panel>
+          </div>
+
+          {/* Row 3, Col 3: Hex Dump */}
+          <div style={{ gridColumn: "3", gridRow: "3" }}>
             <HexDump />
           </div>
-          <div style={{ gridColumn: "3 / 4", gridRow: "3 / 4" }}>
+
+          {/* Row 3, Col 4: Event Log */}
+          <div style={{ gridColumn: "4", gridRow: "3" }}>
             <EventLog />
           </div>
         </div>
-        {/* Bottom status bar */}
-        <div style={{
-          background: "rgba(0, 20, 0, 0.95)",
-          borderTop: "1px solid #003300",
-          padding: "4px 16px",
-          fontSize: "9px",
-          display: "flex",
-          justifyContent: "space-between",
-          color: "#006600",
-          letterSpacing: "1px",
-        }}>
-          <span>SHADOW_NET // AUTONOMOUS ATTACK FRAMEWORK // ALL SYSTEMS OPERATIONAL</span>
-          <span>
-            <EventTicker />
-          </span>
-        </div>
+        <BottomBar />
       </div>
     </div>
   );
